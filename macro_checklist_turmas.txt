@@ -1,0 +1,102 @@
+' ============================================================================
+' MACRO DA ABA CHECKLIST - respostas independentes para cada turma
+'
+' Como instalar (Excel instalado no computador, Windows ou Mac):
+'   1. Abra Planilha_Checklist_Turmas.xlsx no Excel do computador.
+'   2. Clique com o botao direito na guia "Checklist" > "Exibir Codigo".
+'   3. Cole TODO este texto na janela branca que abrir e feche o editor.
+'   4. Arquivo > Salvar como > tipo "Pasta de Trabalho Habilitada para
+'      Macro do Excel (*.xlsm)".
+'   5. Ao abrir o .xlsm, clique em "Habilitar Conteudo" se o Excel pedir.
+'
+' Funcionamento:
+'   - Ao trocar a turma em A1, a Checklist carrega as respostas dessa turma.
+'   - Ao alterar Situacao, Ultima Atualizacao, Prazo, Responsavel ou
+'     Observacao, a resposta e guardada para a turma selecionada (na aba
+'     oculta BaseDados) e A1 atualiza a contagem de itens pendentes.
+' ============================================================================
+Option Explicit
+
+Private Const AREA_ITENS As String = "B3:F40"
+
+Private Sub Worksheet_Change(ByVal Target As Range)
+    Dim alterado As Range
+    On Error GoTo Fim
+    Application.EnableEvents = False
+    If Not Intersect(Target, Me.Range("A1")) Is Nothing Then
+        CarregarTurma
+    Else
+        Set alterado = Intersect(Target, Me.Range(AREA_ITENS))
+        If Not alterado Is Nothing Then
+            SalvarCelulas alterado
+            AtualizarTitulo
+        End If
+    End If
+Fim:
+    Application.EnableEvents = True
+End Sub
+
+' Descobre o codigo da turma (ex.: C21101) a partir do texto de A1
+Private Function CodigoTurma() As String
+    Dim t As Worksheet, i As Long, cod As String, txt As String
+    Set t = ThisWorkbook.Worksheets("Turmas")
+    txt = CStr(Me.Range("A1").Value)
+    For i = 2 To t.Cells(t.Rows.Count, 13).End(xlUp).Row
+        cod = Trim(CStr(t.Cells(i, 13).Value))
+        If Len(cod) > 0 Then
+            If InStr(1, txt, "| " & cod, vbTextCompare) > 0 Then
+                CodigoTurma = cod
+                Exit Function
+            End If
+        End If
+    Next i
+End Function
+
+' Copia as respostas da turma selecionada (BaseDados) para a Checklist
+Private Sub CarregarTurma()
+    Dim b As Worksheet, cod As String, i As Long, c As Long, ultima As Long
+    cod = CodigoTurma()
+    If cod = "" Then Exit Sub
+    Set b = ThisWorkbook.Worksheets("BaseDados")
+    ultima = b.Cells(b.Rows.Count, 1).End(xlUp).Row
+    For i = 2 To ultima
+        If CStr(b.Cells(i, 1).Value) = cod Then
+            For c = 2 To 6
+                Me.Cells(CLng(b.Cells(i, 2).Value), c).Value = b.Cells(i, c + 2).Value
+            Next c
+        End If
+    Next i
+    AtualizarTitulo
+End Sub
+
+' Guarda na BaseDados as celulas alteradas, para a turma selecionada
+Private Sub SalvarCelulas(ByVal alterado As Range)
+    Dim b As Worksheet, cod As String, cel As Range, i As Long, ultima As Long
+    cod = CodigoTurma()
+    If cod = "" Then Exit Sub
+    Set b = ThisWorkbook.Worksheets("BaseDados")
+    ultima = b.Cells(b.Rows.Count, 1).End(xlUp).Row
+    For Each cel In alterado.Cells
+        For i = 2 To ultima
+            If CStr(b.Cells(i, 1).Value) = cod And CLng(b.Cells(i, 2).Value) = cel.Row Then
+                b.Cells(i, cel.Column + 2).Value = cel.Value
+                Exit For
+            End If
+        Next i
+    Next cel
+End Sub
+
+' Reescreve A1 com a turma e a quantidade atual de itens pendentes
+Private Sub AtualizarTitulo()
+    Dim t As Worksheet, cod As String, i As Long
+    cod = CodigoTurma()
+    If cod = "" Then Exit Sub
+    Set t = ThisWorkbook.Worksheets("Turmas")
+    t.Calculate
+    For i = 2 To t.Cells(t.Rows.Count, 13).End(xlUp).Row
+        If Trim(CStr(t.Cells(i, 13).Value)) = cod Then
+            Me.Range("A1").Value = t.Cells(i, 21).Value
+            Exit Sub
+        End If
+    Next i
+End Sub
